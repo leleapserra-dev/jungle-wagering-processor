@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common';
 import { AppConfig } from '../../../config/app-config';
 import type { OutboxRepository } from '../domain/outbox.repository';
+import { dlqMessagesTotal, outboxLagSeconds, outboxPending, retriesTotal } from '../../../shared/observability/metrics';
 
 @Injectable()
 export class OutboxPublisherService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -67,6 +68,12 @@ export class OutboxPublisherService implements OnApplicationBootstrap, OnModuleD
     const now = new Date();
     await this.em.transactional(async () => {
       const messages = await this.outboxRepo.findDueForUpdate(now, this.config.outboxBatchSize);
+      const oldest = messages.reduce<Date | null>(
+        (min, current) => (min === null || current.occurredAt < min ? current.occurredAt : min),
+        null
+      );
+      outboxPending.set(messages.length);
+      outboxLagSeconds.set(oldest === null ? 0 : Math.max(0, (now.getTime() - oldest.getTime()) / 1000));
       for (const message of messages) {
         const groupId = message.aggregateId;
         const dedupId = message.id;
@@ -82,12 +89,17 @@ export class OutboxPublisherService implements OnApplicationBootstrap, OnModuleD
           if (message.attempts >= this.config.outboxMaxAttempts) {
             await this.sqs.sendMessage(this.config.sqsDlqUrl, body, groupId, dedupId);
             await this.outboxRepo.markPublished(message.id, new Date());
+            dlqMessagesTotal.inc({ source: 'outbox' });
             this.logger.warn(`moved outbox message ${message.id} to DLQ after ${message.attempts} attempts`);
             continue;
           }
           await this.sqs.sendMessage(queueUrl, body, groupId, dedupId);
           await this.outboxRepo.markPublished(message.id, new Date());
-        } catch {
+        } catch (error) {
+          retriesTotal.inc({ component: 'outbox' });
+          this.logger.warn(
+            `outbox publish failed for ${message.id}: ${error instanceof Error ? error.message : String(error)}`
+          );
           await this.outboxRepo.scheduleRetry(
             message.id,
             new Date(),
