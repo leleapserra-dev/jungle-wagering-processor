@@ -30,13 +30,20 @@ export class HealthController {
     }
 
     try {
-      const attributes = await this.sqs.client.send(
-        new GetQueueAttributesCommand({
-          QueueUrl: this.config.sqsQueueUrl,
-          AttributeNames: ['QueueArn']
-        })
-      );
-      if (attributes.Attributes?.QueueArn === undefined) sqs = 'fail';
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1500);
+      try {
+        const attributes = await this.sqs.client.send(
+          new GetQueueAttributesCommand({
+            QueueUrl: this.config.sqsQueueUrl,
+            AttributeNames: ['QueueArn']
+          }),
+          { abortSignal: controller.signal }
+        );
+        if (attributes.Attributes?.QueueArn === undefined) sqs = 'fail';
+      } finally {
+        clearTimeout(timeout);
+      }
     } catch {
       sqs = 'fail';
     }
