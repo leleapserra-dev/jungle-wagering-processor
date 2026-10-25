@@ -116,6 +116,7 @@ export class ProcessWagerTransactionUseCase {
         return this.replay(byExternal, cmd.payloadHash, cmd.idempotencyKey);
       }
 
+      let referencedTransaction: WagerTransaction | null = null;
       if (transaction.requiresReference()) {
         const ref = await this.wagerRepo.findByProviderExternal(
           cmd.providerId,
@@ -242,7 +243,7 @@ export class ProcessWagerTransactionUseCase {
           };
         }
 
-        transaction.markProcessed(ref.id, cmd.at, wallet.balance);
+        referencedTransaction = ref;
       }
 
       if (transaction.kind === WagerTransactionKind.Loss) {
@@ -325,9 +326,8 @@ export class ProcessWagerTransactionUseCase {
         await this.walletRepo.update(wallet);
         transaction.markProcessed(undefined, cmd.at, wallet.balance);
         await this.wagerRepo.update(transaction);
-        const eventContext = context(cmd.correlationId, this.ids);
-        const processed = WagerTransactionProcessed.from(transaction, eventContext);
-        const changed = WalletBalanceChanged.from(wallet, entry, eventContext);
+        const processed = WagerTransactionProcessed.from(transaction, context(cmd.correlationId, this.ids));
+        const changed = WalletBalanceChanged.from(wallet, entry, context(cmd.correlationId, this.ids));
         await this.outboxRepo.insert(OutboxMessage.enqueue(processed));
         await this.outboxRepo.insert(OutboxMessage.enqueue(changed));
         if (cmd.inboxMessage !== undefined) {
@@ -344,8 +344,7 @@ export class ProcessWagerTransactionUseCase {
       }
 
       if (transaction.kind === WagerTransactionKind.Refund || transaction.kind === WagerTransactionKind.Rollback) {
-        const refId = transaction.referenceTransactionId;
-        const ref = refId === undefined ? null : await this.wagerRepo.findById(refId);
+        const ref = referencedTransaction;
         if (ref === null) {
           transaction.reject(FailureCode.ReferenceNotFound, cmd.at, wallet.balance);
           await this.wagerRepo.update(transaction);
@@ -403,9 +402,8 @@ export class ProcessWagerTransactionUseCase {
             await this.walletRepo.update(wallet);
             transaction.markProcessed(ref.id, cmd.at, wallet.balance);
             await this.wagerRepo.update(transaction);
-            const eventContext = context(cmd.correlationId, this.ids);
-            const processed = WagerTransactionProcessed.from(transaction, eventContext);
-            const changed = WalletBalanceChanged.from(wallet, entry, eventContext);
+            const processed = WagerTransactionProcessed.from(transaction, context(cmd.correlationId, this.ids));
+            const changed = WalletBalanceChanged.from(wallet, entry, context(cmd.correlationId, this.ids));
             await this.outboxRepo.insert(OutboxMessage.enqueue(processed));
             await this.outboxRepo.insert(OutboxMessage.enqueue(changed));
             if (cmd.inboxMessage !== undefined) {
