@@ -4,7 +4,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import { OutboxMessage } from '../../domain/outbox-message';
 import type { OutboxRepository } from '../../domain/outbox.repository';
 import { OutboxRecord } from './outbox-message.record';
-import { LockMode } from '@mikro-orm/core';
 
 @Injectable()
 export class MikroOrmOutboxRepository implements OutboxRepository {
@@ -28,13 +27,6 @@ export class MikroOrmOutboxRepository implements OutboxRepository {
   }
 
   async findDueForUpdate(now: Date, limit: number): Promise<OutboxMessage[]> {
-    const qb = this.repo
-      .createQueryBuilder('o')
-      .where({ publishedAt: null })
-      .andWhere('(o.next_attempt_at IS NULL OR o.next_attempt_at <= ?)', [now])
-      .orderBy({ occurredAt: 'asc', id: 'asc' })
-      .limit(limit);
-    const records = await qb.getResultList({ lockMode: LockMode.PESSIMISTIC_WRITE, lockVersion: undefined } as never);
     const locked = await this.em.execute(
       `select id, aggregate_id, event_type, payload, occurred_at, attempts, next_attempt_at, published_at
        from outbox_messages
@@ -44,14 +36,14 @@ export class MikroOrmOutboxRepository implements OutboxRepository {
        limit ?`,
       [now, limit]
     );
-    if (Array.isArray(locked) && locked.length > 0) {
-      const ids = (locked as Array<{ id: string }>).map((r) => r.id);
-      const recordsById = await this.repo.find({ id: { $in: ids } } as never);
-      const map = new Map(recordsById.map((r) => [r.id, r]));
-      const ordered = ids.map((id) => map.get(id)).filter((r): r is OutboxRecord => r !== undefined);
-      return ordered.map((record) => this.toDomain(record));
+    if (!Array.isArray(locked) || locked.length === 0) {
+      return [];
     }
-    return records.map((record) => this.toDomain(record));
+    const ids = (locked as Array<{ id: string }>).map((r) => r.id);
+    const recordsById = await this.repo.find({ id: { $in: ids } } as never);
+    const map = new Map(recordsById.map((r) => [r.id, r]));
+    const ordered = ids.map((id) => map.get(id)).filter((r): r is OutboxRecord => r !== undefined);
+    return ordered.map((record) => this.toDomain(record));
   }
 
   async markPublished(id: string, at: Date): Promise<void> {
