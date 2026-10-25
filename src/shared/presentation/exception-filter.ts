@@ -1,6 +1,8 @@
-import { Catch, type ArgumentsHost, type ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import { Catch, Logger, type ArgumentsHost, type ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { DomainError } from '../domain/errors';
+
+const logger = new Logger('GlobalExceptionFilter');
 
 export class AppException extends Error {
   constructor(
@@ -74,6 +76,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const res = exception.getResponse();
       message = typeof res === 'string' ? res : ((res as { message?: string }).message ?? message);
     } else if (exception instanceof Error) {
+      logger.error(exception.message, exception.stack);
       message = 'internal server error';
     }
 
