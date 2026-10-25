@@ -29,6 +29,12 @@ import {
 } from '../domain/events';
 import type { EventContext } from '../../../shared/domain/integration-event';
 import { LedgerDirection } from '../../wallet/domain/ledger-direction';
+import {
+  idempotentReplaysTotal,
+  lockConflictsTotal,
+  processingDuration,
+  transactionsTotal
+} from '../../../shared/observability/metrics';
 
 @Injectable()
 export class ProcessWagerTransactionUseCase {
@@ -43,6 +49,28 @@ export class ProcessWagerTransactionUseCase {
   ) {}
 
   async execute(cmd: ProcessWagerTransactionCommand): Promise<ProcessWagerTransactionResult> {
+    const stopTimer = processingDuration.startTimer();
+    try {
+      const result = await this.processInTransaction(cmd);
+      const kind = result.transaction.kind;
+      const status = result.idempotentReplay ? 'REPLAY' : result.transaction.status;
+      if (result.idempotentReplay) {
+        idempotentReplaysTotal.inc();
+      } else {
+        transactionsTotal.inc({ status, kind });
+      }
+      stopTimer({ kind, status });
+      return result;
+    } catch (error) {
+      if (error instanceof PersistenceConflictError) {
+        lockConflictsTotal.inc({ kind: 'persistence' });
+      }
+      stopTimer({ kind: cmd.kind, status: 'ERROR' });
+      throw error;
+    }
+  }
+
+  private async processInTransaction(cmd: ProcessWagerTransactionCommand): Promise<ProcessWagerTransactionResult> {
     return this.uow.run(async () => {
       const existing = await this.wagerRepo.findByIdempotencyKey(cmd.idempotencyKey);
       if (existing !== null) {

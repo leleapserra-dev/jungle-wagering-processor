@@ -8,6 +8,7 @@ import { Money } from '../../../shared/domain/money';
 import { Sha256PayloadHasher } from '../../../shared/payload-hasher';
 import { ProcessWagerTransactionUseCase } from '../../wagering/application/process-wager-transaction.use-case';
 import { InboxMessage } from '../domain/inbox-message';
+import { dlqMessagesTotal, retriesTotal } from '../../../shared/observability/metrics';
 
 const COMMAND_TYPES = new Set(['ProcessWagerTransaction', 'WagerTransactionRequested']);
 
@@ -237,6 +238,7 @@ export class SqsConsumerService implements OnApplicationBootstrap, OnModuleDestr
       return;
     }
 
+    retriesTotal.inc({ component: 'sqs-consumer' });
     const delaySeconds = this.backoffSeconds(receiveCount, message.MessageId ?? this.ids.next());
     try {
       if (message.ReceiptHandle !== undefined) {
@@ -256,6 +258,7 @@ export class SqsConsumerService implements OnApplicationBootstrap, OnModuleDestr
     try {
       await this.sqs.sendMessage(this.config.sqsDlqUrl, body, groupId, dedupId);
       await this.ack(message);
+      dlqMessagesTotal.inc({ source: 'sqs-consumer' });
       this.logger.warn(`moved message to DLQ: ${reason}`);
     } catch (error) {
       this.logger.error('failed to move message to DLQ', error instanceof Error ? error.stack : String(error));
