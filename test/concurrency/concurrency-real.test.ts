@@ -2,21 +2,35 @@ import { describe, expect, test } from "bun:test";
 import { randomUUID } from "crypto";
 import { Client } from "pg";
 
-const PORTS = [3001, 3002, 3003];
+const PORTS = [3001, 3002, 3003] as const;
 const API = (p: number) => "http://localhost:" + p;
 
-async function req(port: number, method: string, path: string, body?: any, headers?: Record<string, string>) {
+function portAt(index: number): number {
+  return PORTS[index % PORTS.length] ?? PORTS[0];
+}
+
+interface ApiBody {
+  id: string;
+  status: string;
+  idempotentReplay: boolean;
+  failureCode?: string;
+  transactionId?: string;
+  code?: string;
+  balance?: { amount: string; currency: string };
+}
+
+async function req(port: number, method: string, path: string, body?: unknown, headers?: Record<string, string>) {
   const res = await fetch(API(port) + path, {
     method,
     headers: { "Content-Type": "application/json", ...(headers || {}) },
     body: body ? JSON.stringify(body) : undefined
   });
   const text = await res.text();
-  let json: any;
+  let json: ApiBody | undefined;
   try {
-    json = JSON.parse(text);
+    json = JSON.parse(text) as ApiBody;
   } catch {
-    json = text;
+    json = undefined;
   }
   return { status: res.status, json, text };
 }
@@ -37,7 +51,9 @@ async function createWallet(port: number, initialAmount: string) {
   const playerId = "p-" + randomUUID();
   const r = await req(port, "POST", "/wallets", { playerId, initialBalance: { amount: initialAmount, currency: "BRL" } });
   expect(r.status).toBe(201);
-  return { walletId: r.json.id, playerId };
+  const walletId = r.json?.id;
+  if (!walletId) throw new Error("wallet creation failed: " + r.text);
+  return { walletId, playerId };
 }
 
 describe("concurrency real", () => {
@@ -55,7 +71,7 @@ describe("concurrency real", () => {
       kind: "BET",
       money: { amount: "10.00", currency: "BRL" }
     };
-    const calls = Array.from({ length: 50 }).map((_, i) => req(PORTS[i % 3], "POST", "/wagering/transactions", body, { "Idempotency-Key": key }));
+    const calls = Array.from({ length: 50 }).map((_, i) => req(portAt(i), "POST", "/wagering/transactions", body, { "Idempotency-Key": key }));
     const results = await Promise.all(calls);
     const errors = results.filter(r => r.status >= 500);
     const processed = results.filter(r => r.json && r.json.status === "PROCESSED" && r.json.idempotentReplay === false);
@@ -99,7 +115,7 @@ describe("concurrency real", () => {
 
   test("3) many small concurrent bets on same wallet -> no negative balance, final correct", async () => {
     const { walletId, playerId } = await createWallet(PORTS[2], "100.00");
-    const calls = Array.from({ length: 20 }).map(() => req(PORTS[Math.floor(Math.random()*3)], "POST", "/wagering/transactions", {
+    const calls = Array.from({ length: 20 }).map(() => req(portAt(Math.floor(Math.random()*3)), "POST", "/wagering/transactions", {
       providerId: "prov", externalTransactionId: "ext-" + randomUUID(), playerId, walletId, roundId: "r-" + randomUUID(), gameId: "g1", kind: "BET", money: { amount: "5.00", currency: "BRL" }
     }, { "Idempotency-Key": "k-" + randomUUID() }));
     await Promise.all(calls);
@@ -117,8 +133,8 @@ describe("concurrency real", () => {
 
   test("4) distinct wallets in parallel, no global serialization", async () => {
     const tasks = Array.from({ length: 10 }).map(async (_, i) => {
-      const { walletId, playerId } = await createWallet(PORTS[i % 3], "50.00");
-      const r = await req(PORTS[(i+1)%3], "POST", "/wagering/transactions", {
+      const { walletId, playerId } = await createWallet(portAt(i), "50.00");
+      const r = await req(portAt(i + 1), "POST", "/wagering/transactions", {
         providerId: "prov", externalTransactionId: "ext-" + randomUUID(), playerId, walletId, roundId: "r-" + randomUUID(), gameId: "g1", kind: "BET", money: { amount: "10.00", currency: "BRL" }
       }, { "Idempotency-Key": "k-" + randomUUID() });
       return { walletId, r };
@@ -141,7 +157,7 @@ describe("concurrency real", () => {
 
   test("5) simultaneous load on all 3 instances", async () => {
     const { walletId, playerId } = await createWallet(PORTS[0], "200.00");
-    const calls = Array.from({ length: 30 }).map(() => req(PORTS[Math.floor(Math.random()*3)], "POST", "/wagering/transactions", {
+    const calls = Array.from({ length: 30 }).map(() => req(portAt(Math.floor(Math.random()*3)), "POST", "/wagering/transactions", {
       providerId: "prov", externalTransactionId: "ext-" + randomUUID(), playerId, walletId, roundId: "r-" + randomUUID(), gameId: "g1", kind: "BET", money: { amount: "1.00", currency: "BRL" }
     }, { "Idempotency-Key": "k-" + randomUUID() }));
     await Promise.all(calls);

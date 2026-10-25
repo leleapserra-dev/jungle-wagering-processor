@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.local
+*.log
+.DS_Store
+.idea/
+.vscode/
+bun.lockb
+/lint*.txt
+/typecheck*.out
+/tc*.txt
+/unit.txt
+/check_constr2.py
