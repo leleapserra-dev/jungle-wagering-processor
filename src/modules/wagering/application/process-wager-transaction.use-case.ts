@@ -10,7 +10,13 @@ import { WagerTransaction } from '../domain/wager-transaction';
 import { WagerTransactionKind } from '../domain/wager-transaction-status';
 import { FailureCode } from '../domain/failure-code';
 import { UuidV7Generator } from '../../../shared/domain/identity';
-import { IdempotencyConflictError, InsufficientFundsError, PersistenceConflictError } from '../../../shared/domain/errors';
+import {
+  IdempotencyConflictError,
+  InsufficientFundsError,
+  InvalidWagerTransactionError,
+  PersistenceConflictError,
+  WalletNotFoundError
+} from '../../../shared/domain/errors';
 import { OutboxMessage } from '../../messaging/domain/outbox-message';
 import { WagerTransactionPendingReference, WagerTransactionProcessed, WagerTransactionRejected, WalletBalanceChanged } from '../domain/events';
 import type { EventContext } from '../../../shared/domain/integration-event';
@@ -37,7 +43,7 @@ export class ProcessWagerTransactionUseCase {
 
       const kind = kindFrom(cmd.kind);
       if (kind === WagerTransactionKind.Opening) {
-        throw new Error('OPENING is internal only');
+        throw new InvalidWagerTransactionError('OPENING is internal only');
       }
 
       if (cmd.inboxMessage !== undefined) {
@@ -46,7 +52,12 @@ export class ProcessWagerTransactionUseCase {
           const existingInbox = await this.wagerRepo.findByIdempotencyKey(cmd.idempotencyKey);
           if (existingInbox !== null && existingInbox.matchesPayload(cmd.payloadHash)) {
             const wallet = await this.walletRepo.findById(existingInbox.walletId);
-            if (wallet === null) throw new Error('wallet missing for existing transaction');
+            if (wallet === null) {
+              throw new PersistenceConflictError('wallet missing for existing transaction', {
+                transactionId: existingInbox.id,
+                walletId: existingInbox.walletId
+              });
+            }
             return {
               transaction: existingInbox,
               wallet,
@@ -61,7 +72,7 @@ export class ProcessWagerTransactionUseCase {
 
       const wallet = await this.walletRepo.findByIdForUpdate(cmd.walletId);
       if (wallet === null) {
-        throw new Error('wallet not found');
+        throw new WalletNotFoundError('wallet not found', { walletId: cmd.walletId });
       }
 
       const transaction = WagerTransaction.create({
@@ -492,7 +503,7 @@ function kindFrom(kind: string): WagerTransactionKind {
   if (kind === WagerTransactionKind.Refund) return WagerTransactionKind.Refund;
   if (kind === WagerTransactionKind.Rollback) return WagerTransactionKind.Rollback;
   if (kind === WagerTransactionKind.Opening) return WagerTransactionKind.Opening;
-  throw new Error('invalid kind');
+  throw new InvalidWagerTransactionError('invalid kind', { kind });
 }
 
 function context(correlationId: string, ids: UuidV7Generator): EventContext {

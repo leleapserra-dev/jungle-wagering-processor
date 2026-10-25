@@ -7,7 +7,11 @@ import { ReconcileWalletUseCase } from '../../reconciliation/application/reconci
 import { Money } from '../../../shared/domain/money';
 import { AuthGuard } from '../../../shared/presentation/auth.guard';
 import { AppException } from '../../../shared/presentation/exception-filter';
+import { ZodValidationPipe } from '../../../shared/presentation/zod-validation.pipe';
+import { uuidSchema } from '../../../shared/presentation/schemas';
 import { decodeLedgerCursor, encodeLedgerCursor } from './ledger-cursor';
+import { createWalletSchema, type CreateWalletBody } from './create-wallet.dto';
+import { ledgerQuerySchema, type LedgerQuery } from './ledger-query.dto';
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -24,7 +28,7 @@ export class WalletController {
   async create(
     @Headers('x-correlation-id') correlationIdHeader: string | undefined,
     @Headers('X-Correlation-Id') correlationIdHeader2: string | undefined,
-    @Body() body: { playerId: string; initialBalance: { amount: string; currency: string } }
+    @Body(new ZodValidationPipe(createWalletSchema)) body: CreateWalletBody
   ) {
     try {
       const correlationId = correlationIdHeader ?? correlationIdHeader2 ?? this.ids.next();
@@ -49,7 +53,7 @@ export class WalletController {
   }
 
   @Get('/wallets/:walletId')
-  async get(@Param('walletId') walletId: string) {
+  async get(@Param('walletId', new ZodValidationPipe(uuidSchema)) walletId: string) {
     const wallet = await this.getWallet.execute(walletId);
     return {
       id: wallet.id,
@@ -60,8 +64,11 @@ export class WalletController {
   }
 
   @Get('/wallets/:walletId/ledger')
-  async ledger(@Param('walletId') walletId: string, @Query('cursor') cursor?: string, @Query('limit') limit?: string) {
-    const page = await this.getLedger.execute(walletId, decodeLedgerCursor(cursor), Math.min(Number(limit ?? 50), 100));
+  async ledger(
+    @Param('walletId', new ZodValidationPipe(uuidSchema)) walletId: string,
+    @Query(new ZodValidationPipe(ledgerQuerySchema)) query: LedgerQuery
+  ) {
+    const page = await this.getLedger.execute(walletId, decodeLedgerCursor(query.cursor), query.limit ?? 50);
     return {
       entries: page.entries.map((entry) => ({
         id: entry.id,
@@ -77,7 +84,7 @@ export class WalletController {
   }
 
   @Post('/wallets/:walletId/reconciliation')
-  async reconcileWallet(@Param('walletId') walletId: string) {
+  async reconcileWallet(@Param('walletId', new ZodValidationPipe(uuidSchema)) walletId: string) {
     const result = await this.reconcile.execute(walletId);
     return result;
   }
