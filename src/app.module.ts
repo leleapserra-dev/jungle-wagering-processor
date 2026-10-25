@@ -6,6 +6,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { WageringModule } from './modules/wagering/wagering.module';
 import { HealthModule } from './modules/health/health.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
+import { MetricsModule } from './shared/observability/metrics.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { MessagingModule } from './modules/messaging/messaging.module';
     ConfigModuleWrapper,
     DatabaseModule,
     HealthModule,
+    MetricsModule,
     WalletModule,
     WageringModule,
     MessagingModule
