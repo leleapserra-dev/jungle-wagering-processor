@@ -37,7 +37,10 @@ export class MikroOrmWagerTransactionRepository implements WagerTransactionRepos
     return record === null ? null : WagerTransactionMapper.toDomain(record);
   }
 
-  async findProcessedReversal(referenceTransactionId: string, kind: WagerTransactionKind): Promise<WagerTransaction | null> {
+  async findProcessedReversal(
+    referenceTransactionId: string,
+    kind: WagerTransactionKind
+  ): Promise<WagerTransaction | null> {
     const record = await this.repo.findOne({
       referenceTransactionId,
       kind,

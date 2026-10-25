@@ -1,5 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ProcessWagerTransactionCommand, ProcessWagerTransactionResult } from './process-wager-transaction.command';
+import type {
+  ProcessWagerTransactionCommand,
+  ProcessWagerTransactionResult
+} from './process-wager-transaction.command';
 import type { WagerTransactionRepository } from '../domain/wager-transaction.repository';
 import type { WalletRepository } from '../../wallet/domain/wallet.repository';
 import type { WalletLedgerRepository } from '../../wallet/domain/wallet-ledger.repository';
@@ -18,7 +21,12 @@ import {
   WalletNotFoundError
 } from '../../../shared/domain/errors';
 import { OutboxMessage } from '../../messaging/domain/outbox-message';
-import { WagerTransactionPendingReference, WagerTransactionProcessed, WagerTransactionRejected, WalletBalanceChanged } from '../domain/events';
+import {
+  WagerTransactionPendingReference,
+  WagerTransactionProcessed,
+  WagerTransactionRejected,
+  WalletBalanceChanged
+} from '../domain/events';
 import type { EventContext } from '../../../shared/domain/integration-event';
 import { LedgerDirection } from '../../wallet/domain/ledger-direction';
 
@@ -98,10 +106,7 @@ export class ProcessWagerTransactionUseCase {
         if (winner !== null) {
           return this.replay(winner, cmd.payloadHash, cmd.idempotencyKey);
         }
-        const byExternal = await this.wagerRepo.findByProviderExternal(
-          cmd.providerId,
-          cmd.externalTransactionId
-        );
+        const byExternal = await this.wagerRepo.findByProviderExternal(cmd.providerId, cmd.externalTransactionId);
         if (byExternal === null) {
           throw new PersistenceConflictError('transaction insert conflicted without a persisted winner', {
             idempotencyKey: cmd.idempotencyKey
@@ -162,12 +167,10 @@ export class ProcessWagerTransactionUseCase {
         }
 
         if (ref.kind !== WagerTransactionKind.Bet) {
-          if (
-            !(
-              transaction.kind === WagerTransactionKind.Rollback &&
-              (ref.kind === WagerTransactionKind.Win || ref.kind === WagerTransactionKind.Refund)
-            )
-          ) {
+          if (!(
+            transaction.kind === WagerTransactionKind.Rollback &&
+            (ref.kind === WagerTransactionKind.Win || ref.kind === WagerTransactionKind.Refund)
+          )) {
             transaction.reject(FailureCode.InvalidReferenceKind, cmd.at, wallet.balance);
             await this.wagerRepo.update(transaction);
             const eventContext = context(cmd.correlationId, this.ids);
@@ -185,7 +188,10 @@ export class ProcessWagerTransactionUseCase {
               idempotentReplay: false
             };
           }
-        } else if (transaction.kind !== WagerTransactionKind.Refund && transaction.kind !== WagerTransactionKind.Rollback) {
+        } else if (
+          transaction.kind !== WagerTransactionKind.Refund &&
+          transaction.kind !== WagerTransactionKind.Rollback
+        ) {
           transaction.reject(FailureCode.InvalidReferenceKind, cmd.at, wallet.balance);
           await this.wagerRepo.update(transaction);
           const eventContext = context(cmd.correlationId, this.ids);

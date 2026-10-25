@@ -1,4 +1,10 @@
-import { SQSClient, SendMessageCommand, ReceiveMessageCommand, DeleteMessageCommand, ChangeMessageVisibilityCommand } from '@aws-sdk/client-sqs';
+import {
+  SQSClient,
+  SendMessageCommand,
+  ReceiveMessageCommand,
+  DeleteMessageCommand,
+  ChangeMessageVisibilityCommand
+} from '@aws-sdk/client-sqs';
 import { Inject, Injectable } from '@nestjs/common';
 import { AppConfig } from '../../../../config/app-config';
 
@@ -17,13 +23,33 @@ export class SqsClientService {
     this.client = new SQSClient(opts as never);
   }
 
-  async sendMessage(queueUrl: string, body: string, messageGroupId?: string, messageDeduplicationId?: string): Promise<string | undefined> {
-    const res = await this.client.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: body, MessageGroupId: messageGroupId, MessageDeduplicationId: messageDeduplicationId }));
+  async sendMessage(
+    queueUrl: string,
+    body: string,
+    messageGroupId?: string,
+    messageDeduplicationId?: string
+  ): Promise<string | undefined> {
+    const res = await this.client.send(
+      new SendMessageCommand({
+        QueueUrl: queueUrl,
+        MessageBody: body,
+        MessageGroupId: messageGroupId,
+        MessageDeduplicationId: messageDeduplicationId
+      })
+    );
     return res.MessageId;
   }
 
   async receiveMessages(queueUrl: string, maxMessages: number, visibilityTimeout: number, waitTimeSeconds = 20) {
-    const res = await this.client.send(new ReceiveMessageCommand({ QueueUrl: queueUrl, MaxNumberOfMessages: Math.min(maxMessages, 10), VisibilityTimeout: visibilityTimeout, WaitTimeSeconds: waitTimeSeconds, AttributeNames: ['All'] }));
+    const res = await this.client.send(
+      new ReceiveMessageCommand({
+        QueueUrl: queueUrl,
+        MaxNumberOfMessages: Math.min(maxMessages, 10),
+        VisibilityTimeout: visibilityTimeout,
+        WaitTimeSeconds: waitTimeSeconds,
+        AttributeNames: ['All']
+      })
+    );
     return res.Messages ?? [];
   }
 
@@ -32,6 +58,12 @@ export class SqsClientService {
   }
 
   async changeVisibility(queueUrl: string, receiptHandle: string, visibilityTimeout: number): Promise<void> {
-    await this.client.send(new ChangeMessageVisibilityCommand({ QueueUrl: queueUrl, ReceiptHandle: receiptHandle, VisibilityTimeout: visibilityTimeout }));
+    await this.client.send(
+      new ChangeMessageVisibilityCommand({
+        QueueUrl: queueUrl,
+        ReceiptHandle: receiptHandle,
+        VisibilityTimeout: visibilityTimeout
+      })
+    );
   }
 }

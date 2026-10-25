@@ -1,10 +1,10 @@
-import { randomUUID } from "crypto";
-import { Client } from "pg";
+import { randomUUID } from 'crypto';
+import { Client } from 'pg';
 
 export const PORTS = [3001, 3002, 3003] as const;
 
 export function apiUrl(port: number): string {
-  return "http://localhost:" + port;
+  return 'http://localhost:' + port;
 }
 
 export interface ApiResult<T> {
@@ -32,7 +32,7 @@ export interface TransactionResponse {
 export interface LedgerEntry {
   id: string;
   transactionId: string;
-  direction: "DEBIT" | "CREDIT";
+  direction: 'DEBIT' | 'CREDIT';
   money: { amount: string; currency: string };
   balanceBefore: { amount: string; currency: string };
   balanceAfter: { amount: string; currency: string };
@@ -61,7 +61,7 @@ export async function request<T>(
 ): Promise<ApiResult<T>> {
   const response = await fetch(apiUrl(port) + path, {
     method,
-    headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
+    headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
     signal: AbortSignal.timeout(options.timeoutMs ?? 30000)
   });
@@ -76,12 +76,12 @@ export async function request<T>(
 }
 
 export async function createWallet(port: number, initialAmount: string): Promise<WalletResponse> {
-  const playerId = "p-" + randomUUID();
-  const result = await request<WalletResponse>(port, "POST", "/wallets", {
-    body: { playerId, initialBalance: { amount: initialAmount, currency: "BRL" } }
+  const playerId = 'p-' + randomUUID();
+  const result = await request<WalletResponse>(port, 'POST', '/wallets', {
+    body: { playerId, initialBalance: { amount: initialAmount, currency: 'BRL' } }
   });
   if (result.status !== 201 || result.body === undefined) {
-    throw new Error("wallet creation failed: " + result.status + " " + result.text);
+    throw new Error('wallet creation failed: ' + result.status + ' ' + result.text);
   }
   return result.body;
 }
@@ -93,42 +93,42 @@ export interface WagerInput {
   walletId: string;
   roundId: string;
   gameId: string;
-  kind: "BET" | "WIN" | "LOSS" | "REFUND" | "ROLLBACK";
+  kind: 'BET' | 'WIN' | 'LOSS' | 'REFUND' | 'ROLLBACK';
   money: { amount: string; currency: string };
   referenceExternalTransactionId?: string;
 }
 
-export function wagerInput(wallet: WalletResponse, amount: string, kind: WagerInput["kind"] = "BET"): WagerInput {
+export function wagerInput(wallet: WalletResponse, amount: string, kind: WagerInput['kind'] = 'BET'): WagerInput {
   return {
-    providerId: "prov-" + randomUUID(),
-    externalTransactionId: "ext-" + randomUUID(),
+    providerId: 'prov-' + randomUUID(),
+    externalTransactionId: 'ext-' + randomUUID(),
     playerId: wallet.playerId,
     walletId: wallet.id,
-    roundId: "r-" + randomUUID(),
-    gameId: "game-" + randomUUID(),
+    roundId: 'r-' + randomUUID(),
+    gameId: 'game-' + randomUUID(),
     kind,
-    money: { amount, currency: "BRL" }
+    money: { amount, currency: 'BRL' }
   };
 }
 
 export async function submitWager(
   port: number,
   body: WagerInput,
-  idempotencyKey = "idem-" + randomUUID()
+  idempotencyKey = 'idem-' + randomUUID()
 ): Promise<ApiResult<TransactionResponse>> {
-  return request<TransactionResponse>(port, "POST", "/wagering/transactions", {
+  return request<TransactionResponse>(port, 'POST', '/wagering/transactions', {
     body,
-    headers: { "Idempotency-Key": idempotencyKey }
+    headers: { 'Idempotency-Key': idempotencyKey }
   });
 }
 
 export async function getPg(): Promise<Client> {
   const client = new Client({
-    host: process.env.TEST_PG_HOST ?? "localhost",
-    port: Number(process.env.TEST_PG_PORT ?? "5432"),
-    user: process.env.TEST_PG_USER ?? "jungle",
-    password: process.env.TEST_PG_PASSWORD ?? "jungle",
-    database: process.env.TEST_PG_DATABASE ?? "wagering"
+    host: process.env.TEST_PG_HOST ?? 'localhost',
+    port: Number(process.env.TEST_PG_PORT ?? '5432'),
+    user: process.env.TEST_PG_USER ?? 'jungle',
+    password: process.env.TEST_PG_PASSWORD ?? 'jungle',
+    database: process.env.TEST_PG_DATABASE ?? 'wagering'
   });
   await client.connect();
   return client;
@@ -146,16 +146,16 @@ export async function waitFor<T>(
     if (value !== undefined) return value;
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
-  throw new Error("timed out waiting for " + label);
+  throw new Error('timed out waiting for ' + label);
 }
 
 export async function expectStackReady(): Promise<void> {
   for (const port of PORTS) {
-    const result = await request<{ status: string; postgres: string; sqs: string }>(port, "GET", "/health/ready", {
+    const result = await request<{ status: string; postgres: string; sqs: string }>(port, 'GET', '/health/ready', {
       timeoutMs: 10000
     });
-    if (result.status !== 200 || result.body?.status !== "ready") {
-      throw new Error("stack is not ready on port " + port + ": " + result.status + " " + result.text);
+    if (result.status !== 200 || result.body?.status !== 'ready') {
+      throw new Error('stack is not ready on port ' + port + ': ' + result.status + ' ' + result.text);
     }
   }
 }

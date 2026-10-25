@@ -1,0 +1,14 @@
+node_modules
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+dist
+coverage
+*.log
+test
+lint*.txt
+typecheck*.out
+tc*.txt
+unit.txt

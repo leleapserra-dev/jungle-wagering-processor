@@ -21,7 +21,11 @@ export class MikroOrmLedgerRepository implements WalletLedgerRepository {
   }
 
   async findPage(walletId: string, cursor: LedgerCursor | null, limit: number): Promise<LedgerPage> {
-    const qb = this.repo.createQueryBuilder('e').where({ walletId }).orderBy({ createdAt: 'desc', id: 'desc' }).limit(limit + 1);
+    const qb = this.repo
+      .createQueryBuilder('e')
+      .where({ walletId })
+      .orderBy({ createdAt: 'desc', id: 'desc' })
+      .limit(limit + 1);
     if (cursor !== null) {
       qb.andWhere('(e.created_at < ? OR (e.created_at = ? AND e.id < ?))', [
         cursor.createdAt,

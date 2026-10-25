@@ -80,14 +80,23 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       message = 'internal server error';
     }
 
-    const correlationId = (request.headers['x-correlation-id'] as string | undefined) ?? (request.headers['X-Correlation-Id'] as string | undefined) ?? undefined;
+    const correlationId =
+      (request.headers['x-correlation-id'] as string | undefined) ??
+      (request.headers['X-Correlation-Id'] as string | undefined) ??
+      undefined;
     if (correlationId) {
       response.setHeader('X-Correlation-Id', correlationId);
     }
     if (status === HttpStatus.SERVICE_UNAVAILABLE) {
       response.setHeader('Retry-After', '5');
     }
-    if (code === 'BUSINESS_REJECTION' && details && typeof details === 'object' && 'transactionId' in details && 'status' in details) {
+    if (
+      code === 'BUSINESS_REJECTION' &&
+      details &&
+      typeof details === 'object' &&
+      'transactionId' in details &&
+      'status' in details
+    ) {
       response.status(status).json(details);
       return;
     }

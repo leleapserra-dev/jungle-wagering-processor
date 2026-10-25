@@ -1,0 +1,110 @@
+name: distributed-wagering-processor
+
+x-app-env: &app-env
+  NODE_ENV: production
+  PORT: 3000
+  LOG_LEVEL: info
+  DATABASE_URL: postgresql://jungle:jungle@postgres:5432/wagering
+  DATABASE_POOL_SIZE: 10
+  DATABASE_SSL: 'false'
+  AWS_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  SQS_ENDPOINT: http://localstack:4566
+  SQS_QUEUE_URL: http://localstack:4566/000000000000/wager-transactions.fifo
+  SQS_DLQ_URL: http://localstack:4566/000000000000/wager-transactions-dlq.fifo
+  SQS_EVENTS_QUEUE_URL: http://localstack:4566/000000000000/wager-events.fifo
+  SQS_CONSUMER_ENABLED: 'true'
+  SQS_CONSUMER_NAME: wager-transactions
+  SQS_MAX_RECEIVE_COUNT: 5
+  SQS_VISIBILITY_TIMEOUT_SECONDS: 60
+  SQS_BACKOFF_BASE_SECONDS: 5
+  SQS_BACKOFF_MAX_SECONDS: 300
+  OUTBOX_ENABLED: 'true'
+  OUTBOX_POLL_INTERVAL_MS: 1000
+  OUTBOX_BATCH_SIZE: 25
+  OUTBOX_MAX_ATTEMPTS: 20
+  OUTBOX_BACKOFF_BASE_MS: 1000
+  OUTBOX_BACKOFF_MAX_MS: 60000
+  PENDING_REFERENCE_ENABLED: 'true'
+  PENDING_REFERENCE_POLL_INTERVAL_MS: 5000
+  PENDING_REFERENCE_BATCH_SIZE: 50
+  PENDING_REFERENCE_MAX_ATTEMPTS: 10
+  PENDING_REFERENCE_BACKOFF_BASE_MS: 5000
+  PENDING_REFERENCE_BACKOFF_MAX_MS: 300000
+  AUTH_ENABLED: 'false'
+  CORS_ORIGINS: ''
+
+x-app: &app
+  build: .
+  depends_on:
+    postgres:
+      condition: service_healthy
+    localstack:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+  environment: *app-env
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: jungle
+      POSTGRES_PASSWORD: jungle
+      POSTGRES_DB: wagering
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U jungle -d wagering']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+  localstack:
+    image: localstack/localstack:3.8
+    environment:
+      SERVICES: sqs
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -sf http://localhost:4566/_localstack/health | grep -q ''"sqs"''']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - ./docker/localstack/init-sqs.sh:/etc/localstack/init/ready.d/init-sqs.sh:ro
+      - localstack-data:/var/lib/localstack
+    ports:
+      - '4566:4566'
+
+  migrate:
+    build: .
+    command: ['bun', 'src/scripts/migrate.ts', 'up']
+    environment: *app-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app-1:
+    <<: *app
+    ports:
+      - '3001:3000'
+
+  app-2:
+    <<: *app
+    ports:
+      - '3002:3000'
+
+  app-3:
+    <<: *app
+    ports:
+      - '3003:3000'
+
+volumes:
+  postgres-data:
+  localstack-data:

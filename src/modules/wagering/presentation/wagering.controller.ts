@@ -122,7 +122,10 @@ export class WageringController {
   }
 
   @Get('/providers/:providerId/wagering/transactions/:externalTransactionId')
-  async getByExternal(@Param('providerId') providerId: string, @Param('externalTransactionId') externalTransactionId: string) {
+  async getByExternal(
+    @Param('providerId') providerId: string,
+    @Param('externalTransactionId') externalTransactionId: string
+  ) {
     const tx = await this.wagerRepo.findByProviderExternal(providerId, externalTransactionId);
     if (tx === null) throw new AppException('NOT_FOUND', 'transaction not found', HttpStatus.NOT_FOUND);
     return {
