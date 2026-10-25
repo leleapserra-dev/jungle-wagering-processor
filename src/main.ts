@@ -1,8 +1,10 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { AppConfig } from './config/app-config';
 import { GlobalExceptionFilter } from './shared/presentation/exception-filter';
+import { requestLogger } from './shared/presentation/request-logger';
 import { UuidV7Generator } from './shared/domain/identity';
 import type { Request, Response, NextFunction } from 'express';
 
@@ -19,6 +21,7 @@ function validateRequiredConfig(config: AppConfig): void {
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  app.useLogger(app.get(Logger));
   const ids = new UuidV7Generator();
   app.use((req: Request, res: Response, next: NextFunction) => {
     const cid =
@@ -30,6 +33,7 @@ async function bootstrap(): Promise<void> {
     res.setHeader('x-correlation-id', cid);
     next();
   });
+  app.use(requestLogger);
   app.useGlobalFilters(new GlobalExceptionFilter());
   const config = app.get(AppConfig);
   validateRequiredConfig(config);
