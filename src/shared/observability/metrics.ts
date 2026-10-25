@@ -44,6 +44,13 @@ export const lockConflictsTotal = new Counter({
   registers: [registry]
 });
 
+export const reconciliationRunsTotal = new Counter({
+  name: 'reconciliation_runs_total',
+  help: 'Wallet reconciliations by outcome',
+  labelNames: ['result'] as const,
+  registers: [registry]
+});
+
 export const outboxPending = new Gauge({
   name: 'outbox_pending_messages',
   help: 'Outbox messages waiting to be published',
